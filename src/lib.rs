@@ -1,6 +1,6 @@
 use clap::Parser;
-use exr::prelude::*;
 use flume::bounded;
+use image::{ImageBuffer, Rgba};
 use std::path::PathBuf;
 
 mod slang_macros;
@@ -31,39 +31,18 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     // READ EXR FILE
     println!("Reading EXR file: {:?}", args.input);
-    let image = read_first_rgba_layer_from_file(
-        &args.input,
-        |resolution, _| {
-            let default_pixel = [0.0, 0.0, 0.0, 0.0];
-            let empty_line = vec![default_pixel; resolution.width()];
-            let empty_image = vec![empty_line; resolution.height()];
-            empty_image
-        },
-        // transfer the colors from the file to your image type,
-        // requesting all values to be converted to f32 numbers
-        |pixel_vector, position, (r, g, b, a): (f32, f32, f32, f32)| {
-            pixel_vector[position.y()][position.x()] = [r, g, b, a]
-        },
-    )?;
+    let img = image::open(&args.input)?.into_rgba32f();
 
     let texture_size = wgpu::Extent3d {
-        width: image.layer_data.size.width() as u32,
-        height: image.layer_data.size.height() as u32,
+        width: img.width(),
+        height: img.height(),
         depth_or_array_layers: 1,
     };
-    let pixel_count = (texture_size.width * texture_size.height) as usize;
     println!("Image dimensions: {:?}", texture_size);
 
-    // Convert EXR RGBA data to f32 array for GPU
-    let mut input_data = Vec::with_capacity(pixel_count * 4);
-    for row in &image.layer_data.channel_data.pixels {
-        for pixel in row {
-            input_data.push(pixel[0]);
-            input_data.push(pixel[1]);
-            input_data.push(pixel[2]);
-            input_data.push(pixel[3]);
-        }
-    }
+    // Convert image data to f32 array for GPU
+    let input_data: Vec<f32> = img.as_raw().to_vec();
+    println!("input 1: {:?}", input_data[0]);
 
     // CREATE TEXTURES
     let texture_format = wgpu::TextureFormat::Rgba32Float;
@@ -194,29 +173,13 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     // We need to unmap the buffer to be able to use it again
     temp_buffer.unmap();
 
-    // Convert output data back to EXR RGBA format
+    // Write output EXR file
     println!("Writing output to: {:?}", args.output);
-    let mut output_pixels = Vec::with_capacity(pixel_count);
-    for i in 0..pixel_count {
-        let offset = i * 4;
-        output_pixels.push((
-            output_data[offset],
-            output_data[offset + 1],
-            output_data[offset + 2],
-            output_data[offset + 3],
-        ));
-    }
+    let output_image: ImageBuffer<Rgba<f32>, Vec<f32>> =
+        ImageBuffer::from_raw(texture_size.width, texture_size.height, output_data)
+            .expect("Failed to create output image buffer");
 
-    // Write EXR file
-    write_rgba_file(
-        &args.output,
-        texture_size.width as usize,
-        texture_size.height as usize,
-        |x, y| {
-            // Return the pixel at the given coordinates
-            output_pixels[y * texture_size.width as usize + x]
-        },
-    )?;
+    output_image.save(&args.output)?;
 
     println!("Successfully processed image!");
 
