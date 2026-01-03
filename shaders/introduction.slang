@@ -1,18 +1,17 @@
-StructuredBuffer<uint> input;
-RWStructuredBuffer<uint> output;
+Texture2D<float4> inputTexture;
+WTexture2D<float4> outputTexture;
 
 [shader("compute")]
-[numthreads(64, 1, 1)]
+[numthreads(8, 8, 1)]
 void main(uint3 global_invocation_id: SV_DispatchThreadID) {
-  uint index = global_invocation_id.x;
-  uint total;
-  uint stride;
-  input.GetDimensions(total, stride);
+  uint2 pixel_coords = global_invocation_id.xy;
+  uint width, height;
+  inputTexture.GetDimensions(width, height);
 
-  if (index >= total) {
+  if (pixel_coords.x >= width || pixel_coords.y >= height) {
     return;
   }
 
   // a simple copy operation
-  output[global_invocation_id.x] = input[global_invocation_id.x];
+  outputTexture.Store(pixel_coords, inputTexture[pixel_coords]);
 }
