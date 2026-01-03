@@ -1,5 +1,8 @@
+use clap::Parser;
 use pollster::FutureExt;
+use wgpu_slang_aces2::Args;
 
 fn main() {
-    wgpu_slang_aces2::run().block_on().unwrap();
+    let args = Args::parse();
+    wgpu_slang_aces2::run(args).block_on().unwrap();
 }
