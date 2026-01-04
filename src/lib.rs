@@ -18,7 +18,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let adapter = instance.request_adapter(&Default::default()).await.unwrap();
     let (device, queue) = adapter.request_device(&Default::default()).await.unwrap();
 
-    let shader = device.create_shader_module(wgpu_include_slang_shader!("introduction"));
+    let shader = device.create_shader_module(wgpu_include_slang_shader!("entry"));
 
     let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: Some("ACES 2.0 Compute Pipeline"),
@@ -42,7 +42,6 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     // Convert image data to f32 array for GPU
     let input_data: Vec<f32> = img.as_raw().to_vec();
-    println!("input 1: {:?}", input_data[0]);
 
     // CREATE TEXTURES
     let texture_format = wgpu::TextureFormat::Rgba32Float;
