@@ -3,6 +3,7 @@ use flume::bounded;
 use image::{ImageBuffer, Rgba};
 use std::path::PathBuf;
 
+mod aces;
 mod slang_macros;
 
 #[derive(Parser, Debug)]
