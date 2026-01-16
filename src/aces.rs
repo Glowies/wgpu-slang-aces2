@@ -1,5 +1,37 @@
 use glam::{Mat3, Vec3};
 
+// CAM Parameters
+const ref_luminance:f32 = 100.;
+const L_A:f32 = 100.;
+const Y_b:f32 = 20.;
+const surround:Vec3 = Vec3::new(0.9, 0.59, 0.9); // Dim surround
+
+const J_scale:f32 = 100.0;
+const cam_nl_Y_reference:f32 = 100.0;
+const cam_nl_offset:f32 = 0.2713 * cam_nl_Y_reference;
+const cam_nl_scale:f32 = 4.0 * cam_nl_Y_reference;
+
+// Chroma compression
+const chroma_compress:f32 = 2.4;
+const chroma_compress_fact:f32 = 3.3;
+const chroma_expand:f32 = 1.3;
+const chroma_expand_fact:f32 = 0.69;
+const chroma_expand_thr:f32 = 0.5;
+
+// Gamut compression
+const smooth_cusps:f32 = 0.12;
+const smooth_m:f32 = 0.27;
+const cusp_mid_blend:f32 = 1.3;
+
+const focus_gain_blend:f32 = 0.3;
+const focus_adjust_gain:f32 = 0.55;
+const focus_distance:f32 = 1.35;
+const focus_distance_scaling:f32 = 1.75;
+
+const compression_threshold:f32 = 0.75;
+
+const MATRIX_IDENTITY:Mat3 = Mat3::IDENTITY;
+
 fn invert_f33(m: Mat3) -> Mat3 {
     m.inverse()
 }
@@ -146,63 +178,64 @@ fn init_JMhParams(rgb_to_xyz: Mat3) -> JMhParams
         1. / 20., 1. / 11., -2. / 9.]);
 
     let RGB_TO_XYZ = rgb_to_xyz;
-    const float XYZ_w[3] = mult_f3_f33(f3_from_f(ref_luminance), RGB_TO_XYZ);
+    let XYZ_w = mult_f3_f33(f3_from_f(ref_luminance), RGB_TO_XYZ);
 
-    float Y_w = XYZ_w[1];
+    let Y_w = XYZ_w[1];
 
     // Step 0 - Converting CIE XYZ tristimulus values to sharpened RGB values
-    float RGB_w[3] = mult_f3_f33(XYZ_w, MATRIX_16);
+    let RGB_w = mult_f3_f33(XYZ_w, MATRIX_16);
 
     // Viewing condition dependent parameters
-    const float k = 1. / (5. * L_A + 1.);
-    const float k4 = k * k * k * k;
-    const float F_L = 0.2 * k4 * (5. * L_A) + 0.1 * pow((1. - k4), 2.) * pow(5. * L_A, 1. / 3.);
+    let k = 1. / (5. * L_A + 1.);
+    let k4 = k * k * k * k;
+    let F_L = 0.2 * k4 * (5. * L_A) + 0.1 * (1. - k4).powf(2.) * (5. * L_A).powf(1. / 3.);
 
-    const float F_L_n = F_L / ref_luminance;
-    const float cz = model_gamma;
+    let F_L_n = F_L / ref_luminance;
+    let model_gamma = surround[1] * (1.48 + (Y_b / ref_luminance).sqrt());
+    let cz = model_gamma;
 
-    const float D_RGB[3] = {
+    let D_RGB = Vec3::new(
         F_L_n * Y_w / RGB_w[0],
         F_L_n * Y_w / RGB_w[1],
-        F_L_n * Y_w / RGB_w[2]};
+        F_L_n * Y_w / RGB_w[2]);
 
-    const float RGB_wc[3] = {
+    let RGB_wc = Vec3::new(
         D_RGB[0] * RGB_w[0],
         D_RGB[1] * RGB_w[1],
-        D_RGB[2] * RGB_w[2]};
+        D_RGB[2] * RGB_w[2]);
 
-    const float RGB_Aw[3] = {
+    let RGB_Aw = Vec3::new(
         post_adaptation_cone_response_compression_fwd(RGB_wc[0]),
         post_adaptation_cone_response_compression_fwd(RGB_wc[1]),
-        post_adaptation_cone_response_compression_fwd(RGB_wc[2])};
+        post_adaptation_cone_response_compression_fwd(RGB_wc[2]));
 
-    float cone_response_to_Aab[3][3] = mult_f33_f33(mult_f_f33(cam_nl_scale, MATRIX_IDENTITY), base_cone_response_to_Aab);
-    float A_w = cone_response_to_Aab[0][0] * RGB_Aw[0] + cone_response_to_Aab[1][0] * RGB_Aw[1] + cone_response_to_Aab[2][0] * RGB_Aw[2];
-    float A_w_J = _post_adaptation_cone_response_compression_fwd(F_L);
+    let cone_response_to_Aab = mult_f33_f33(mult_f_f33(cam_nl_scale, MATRIX_IDENTITY), base_cone_response_to_Aab);
+    let cone_response_to_Aab_array = cone_response_to_Aab.to_cols_array_2d();
+    let A_w = cone_response_to_Aab_array[0][0] * RGB_Aw[0] + cone_response_to_Aab_array[1][0] * RGB_Aw[1] + cone_response_to_Aab_array[2][0] * RGB_Aw[2];
+    let A_w_J = _post_adaptation_cone_response_compression_fwd(F_L);
 
     // Prescale the CAM16 LMS responses to directly provide for chromatic adaptation
-    float M1[3][3] = mult_f33_f33(RGB_TO_XYZ, MATRIX_16);
-    float M2[3][3] = mult_f_f33(ref_luminance, MATRIX_IDENTITY);
-    float MATRIX_RGB_to_CAM16[3][3] = mult_f33_f33(M1, M2);
-    float MATRIX_RGB_to_CAM16_c[3][3] = mult_f33_f33(MATRIX_RGB_to_CAM16, scale_matrix_diagonal_f33_f3(MATRIX_IDENTITY, D_RGB));
+    let M1 = mult_f33_f33(RGB_TO_XYZ, MATRIX_16);
+    let M2 = mult_f_f33(ref_luminance, MATRIX_IDENTITY);
+    let MATRIX_RGB_to_CAM16 = mult_f33_f33(M1, M2);
+    let MATRIX_RGB_to_CAM16_c = mult_f33_f33(MATRIX_RGB_to_CAM16, scale_matrix_diagonal_f33_f3(MATRIX_IDENTITY, D_RGB));
 
-    float MATRIX_cone_response_to_Aab[3][3] = {
-        {cone_response_to_Aab[0][0] / A_w, cone_response_to_Aab[0][1] * 43. * surround[2], cone_response_to_Aab[0][2] * 43. * surround[2]},
-        {cone_response_to_Aab[1][0] / A_w, cone_response_to_Aab[1][1] * 43. * surround[2], cone_response_to_Aab[1][2] * 43. * surround[2]},
-        {cone_response_to_Aab[2][0] / A_w, cone_response_to_Aab[2][1] * 43. * surround[2], cone_response_to_Aab[2][2] * 43. * surround[2]}};
+    let MATRIX_cone_response_to_Aab = Mat3::from_cols_array(&[
+        cone_response_to_Aab_array[0][0] / A_w, cone_response_to_Aab_array[0][1] * 43. * surround[2], cone_response_to_Aab_array[0][2] * 43. * surround[2],
+        cone_response_to_Aab_array[1][0] / A_w, cone_response_to_Aab_array[1][1] * 43. * surround[2], cone_response_to_Aab_array[1][2] * 43. * surround[2],
+        cone_response_to_Aab_array[2][0] / A_w, cone_response_to_Aab_array[2][1] * 43. * surround[2], cone_response_to_Aab_array[2][2] * 43. * surround[2]]);
 
-    JMhParams p;
-    p.MATRIX_RGB_to_CAM16_c = MATRIX_RGB_to_CAM16_c;
-    p.MATRIX_CAM16_c_to_RGB = invert_f33(MATRIX_RGB_to_CAM16_c);
-    p.MATRIX_cone_response_to_Aab = MATRIX_cone_response_to_Aab;
-    p.MATRIX_Aab_to_cone_response = invert_f33(MATRIX_cone_response_to_Aab);
-    p.F_L_n = F_L_n;
-    p.cz = cz;
-    p.inv_cz = 1. / cz;
-    p.A_w_J = A_w_J;
-    p.inv_A_w_J = 1. / A_w_J;
-
-    return p;
+    JMhParams {
+        matrix_rgb_to_cam16_c: MATRIX_RGB_to_CAM16_c,
+        matrix_cam16_c_to_rgb: invert_f33(MATRIX_RGB_to_CAM16_c),
+        matrix_cone_response_to_aab: MATRIX_cone_response_to_Aab,
+        matrix_aab_to_cone_response: invert_f33(MATRIX_cone_response_to_Aab),
+        f_l_n: F_L_n,
+        cz: cz,
+        inv_cz: 1. / cz,
+        a_w_j: A_w_J,
+        inv_a_w_j: 1. / A_w_J,
+    }
 }
 
 fn init_ODTParams(float peakLuminance,
