@@ -133,11 +133,12 @@ const static float tn_Lg = 10.0; // Display Grey Luminance
 // DEFINE_UI_PARAMS(_cwp_lm, Creative White Limit, DCTLUI_SLIDER_FLOAT, 0.25, 0.0, 1.0, 0.0)
 // DEFINE_UI_PARAMS(display_encoding_preset, Display Encoding Preset, DCTLUI_COMBO_BOX, 0, {rec1886, srgb, displayp3, p3d60, p3dci, xyz, rec2100pq, rec2100hlg, dolbypq}, {Rec.1886 - 2.4 Power / Rec.709, sRGB Display - 2.2 Power / Rec.709, Display P3 - 2.2 Power / P3-D65, DCI - 2.6 Power / P3-D60, DCI - 2.6 Power / P3-DCI, DCI - 2.6 Power / XYZ, Rec.2100 - PQ / Rec.2020 (P3 Limited), Rec.2100 - HLG / Rec.2020 (P3 Limited), Dolby - PQ / P3-D65})
 
-const static uint look_preset = 0; // Look Preset
+// 0-Standard, 1-Arriba, 2-Sylvan, 3-Colorful, 4-Aery, 5-Dystopic, 6-Umbra
+const static uint look_preset = 2; // Look Preset
 const static uint tonescale_preset = 0; // Tonescale Preset
 const static uint _cwp = 0; // Creative White
 const static float _cwp_lm = 0.25; // Creative White Limit
-const static uint display_encoding_preset = 0; // Display Encoding Preset
+const static uint display_encoding_preset = 1; // Display Encoding Preset
 
 /*------------------------------------------------------------------------------------------------------------*/
 
@@ -304,6 +305,37 @@ float _atan2f(float a, float b)
 float3 vdot(float3x3 m, float3 v) {
   return mul(m, v);
 }
+
+/******************************************************************
+  Gamut Conversion Matrices
+ ******************************************************************/
+// Input gamut conversion matrices
+const static float3x3 matrix_ap0_to_xyz = make_float3x3(make_float3(0.938630948750273197f, -0.00574192055037397141f, 0.017566898851772296f), make_float3(0.338093594922021567f, 0.72721390281143572f, -0.0653074977334571899f), make_float3(0.000723121511341165988f, 0.000818441849244731985f, 1.08751618739929268f));
+const static float3x3 matrix_ap1_to_xyz = make_float3x3(make_float3(0.652418717671912951f, 0.127179925537538263f, 0.170857283842220459f), make_float3(0.268064059194271287f, 0.672464478992617742f, 0.0594714618131108388f), make_float3(-0.0054699285104975676f, 0.00518279997697511721f, 1.08934487929340107f));
+const static float3x3 matrix_rec2020_to_xyz = make_float3x3(make_float3(0.636958048301290991f, 0.144616903586208406f, 0.168880975164172054f), make_float3(0.26270021201126692f, 0.677998071518871148f, 0.0593017164698619384f), make_float3(4.9999999999999999e-17f, 0.0280726930490874452f, 1.06098505771079066f));
+const static float3x3 matrix_arriwg3_to_xyz = make_float3x3(make_float3(0.638007619284f, 0.214703856337f, 0.097744451431f), make_float3(0.291953779f, 0.823841041511f, -0.11579482051f), make_float3(0.002798279032f, -0.067034235689f, 1.15329370742f));
+const static float3x3 matrix_arriwg4_to_xyz = make_float3x3(make_float3(0.704858320407231953f, 0.129760295170463003f, 0.115837311473976537f), make_float3(0.254524176404026969f, 0.781477732712002049f, -0.0360019091160290391f), make_float3(0.0f, 0.0f, 1.08905775075987843f));
+const static float3x3 matrix_redwg_to_xyz = make_float3x3(make_float3(0.735275245905858799f, 0.0686094106139610721f, 0.14657127053185201f), make_float3(0.286694099499934962f, 0.842979134016975662f, -0.129673233516910319f), make_float3(-0.0796808568783676785f, -0.347343216994429771f, 1.51608182463267593f));
+const static float3x3 matrix_sonysgamut3_to_xyz = make_float3x3(make_float3(0.706482713192318812f, 0.12880104979055762f, 0.115172164068795255f), make_float3(0.270979670813492168f, 0.786606411220905466f, -0.0575860820343976273f), make_float3(-0.00967784538619615754f, 0.00460003749251991934f, 1.09413555865355483f));
+const static float3x3 matrix_sonysgamut3cine_to_xyz = make_float3x3(make_float3(0.599083920758327171f, 0.248925516115423628f, 0.102446490177920776f), make_float3(0.215075820115587457f, 0.88506850174372842f, -0.100144321859315821f), make_float3(-0.0320658495445057951f, -0.0276583906794915374f, 1.1487819909838759f));
+const static float3x3 matrix_vgamut_to_xyz = make_float3x3(make_float3(0.679644469878f, 0.15221141244f, 0.118600044733), make_float3(0.26068555009f, 0.77489446333f, -0.03558001342), make_float3(-0.009310198218f, -0.004612467044f, 1.10298041602));
+const static float3x3 matrix_bmdwg_to_xyz = make_float3x3(make_float3(0.606538368282783846f, 0.220412735329269888f, 0.12350482343961787f), make_float3(0.2679929400567444f, 0.832748409123375777f, -0.100741349180120274f), make_float3(-0.029442554160109307f, -0.0866124302772565829f, 1.20511273519724438f));
+const static float3x3 matrix_egamut_to_xyz = make_float3x3(make_float3(0.705396850087770755f, 0.164041328309919021f, 0.0810177486539819941f), make_float3(0.280130724091105898f, 0.820206641549595106f, -0.100337365640700782f), make_float3(-0.103781511569163279f, -0.0729072570266306313f, 1.26574651935567273f));
+const static float3x3 matrix_egamut2_to_xyz = make_float3x3(make_float3(0.736477700183697404f, 0.130739651086660136f, 0.0832385757813140781f), make_float3(0.275069984405959256f, 0.828017790215514138f, -0.103087774621473588f), make_float3(-0.124225154247852534f, -0.0871597673911067433f, 1.30044267239883782f));
+const static float3x3 matrix_davinciwg_to_xyz = make_float3x3(make_float3(0.700622392093671609f, 0.148774815123196763f, 0.101058719834803246f), make_float3(0.274118510906649016f, 0.873631895940436665f, -0.147750406847085763f), make_float3(-0.0989629128832311411f, -0.137895325075543307f, 1.32591598871865268f));
+
+// P3D65 to XYZ D65
+const static float3x3 matrix_p3d65_to_xyz = make_float3x3(make_float3(0.486570948648216151f, 0.265667693169093f, 0.198217285234362467f), make_float3(0.228974564069748754f, 0.691738521836506193f, 0.079286914093744984f), make_float3(-4.00000000000000029e-17f, 0.0451133818589026167f, 1.04394436890097575f));
+// XYZ D65 to P3D65
+const static float3x3 matrix_xyz_to_p3d65 = make_float3x3(make_float3(2.49349691194142542f, -0.93138361791912383f, -0.402710784450716841f), make_float3(-0.829488969561574696f, 1.76266406031834655f, 0.0236246858419435941f), make_float3(0.0358458302437844531f, -0.0761723892680418041f, 0.956884524007687309f));
+// Rec709 to XYZ D65
+const static float3x3 matrix_rec709_to_xyz = make_float3x3(make_float3(0.412390799265959229f, 0.357584339383878125f, 0.180480788401834347f), make_float3(0.212639005871510217f, 0.71516867876775625f, 0.0721923153607337414f), make_float3(0.0193308187155918181f, 0.119194779794626018f, 0.950532152249661033f));
+// XYZ D65 to Rec709
+const static float3x3 matrix_xyz_to_rec709 = make_float3x3(make_float3(3.24096994190452348f, -1.53738317757009435f, -0.498610760293003552f), make_float3(-0.969243636280879506f, 1.87596750150771996f, 0.0415550574071755843f), make_float3(0.0556300796969936354f, -0.20397695888897649f, 1.05697151424287816f));
+// P3D65 to Rec2020
+const static float3x3 matrix_p3_to_rec2020 = make_float3x3(make_float3(0.753833034361722221f, 0.198597369052616435f, 0.0475695965856618441f), make_float3(0.0457438489653582137f, 0.9417772198116936f, 0.0124789312229481135f), make_float3(-0.0012103403545183941f, 0.0176017173010899926f, 0.983608623053428777f));
+// P3DCI to XYZ DCI (NPM Matrix)
+const static float3x3 matrix_p3dci_to_xyz = make_float3x3(make_float3(0.445169815564552429f, 0.27713440920677751f, 0.172282669815564504f), make_float3(0.209491677912730545f, 0.721595254161043309f, 0.0689130679262257989f), make_float3(-3.59999999999999995e-17f, 0.0470605600539811264f, 0.9073553943619731f));
 
 /******************************************************************
   CAT02 Chromatic Adaptation Matrices
@@ -701,10 +733,9 @@ float3 display_gamut_whitepoint(float3 rgb, float tsn, float cwp_lm, int display
 
 
 
-float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
+// float3 opendrt_transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
+float3 opendrt_transform(float3 rgb)
 {
-  float3 rgb = make_float3(p_R, p_G, p_B);
-
   /*****************************************************
     Parameter Setup
     --------------------------------------------------*/
@@ -890,9 +921,9 @@ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p
   // else if (in_gamut==14) in_to_xyz = matrix_egamut2_to_xyz;
   // else if (in_gamut==15) in_to_xyz = matrix_davinciwg_to_xyz;
 
-  float crv_tsn = 0.0f;
-  float2 pos = make_float2(p_X, p_Y);
-  float2 res = make_float2(p_Width, p_Height);
+  // float crv_tsn = 0.0f;
+  // float2 pos = make_float2(p_X, p_Y);
+  // float2 res = make_float2(p_Width, p_Height);
 
   // x-position based input value for tonescale overlay
   // if (crv_enable == 1) crv_tsn = oetf_filmlight_tlog(pos.x/res.x);
@@ -1135,7 +1166,7 @@ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p
   //   if (eotf == 4) crv_tsn *= 10.0f;
   // }
 
-  float3 crv_rgb = make_float3(crv_tsn, crv_tsn, crv_tsn);
+  // float3 crv_rgb = make_float3(crv_tsn, crv_tsn, crv_tsn);
   // if (crv_enable == 1) crv_rgb = display_gamut_whitepoint(crv_rgb, crv_tsn_const, cwp_lm, display_gamut, cwp);
 
   // Return from RGB ratios
