@@ -13,6 +13,8 @@
 // DEFINE_UI_PARAMS(in_oetf, Input Transfer Function, DCTLUI_COMBO_BOX, 1, {ioetf_linear, ioetf_davinci_intermediate, ioetf_filmlight_tlog, ioetf_acescct, ioetf_arri_logc3, ioetf_arri_logc4, ioetf_redlog3g10, ioetf_panasonic_vlog, ioetf_sony_slog3, ioetf_fuji_flog}, {Linear, Davinci Intermediate, Filmlight T-Log, ACEScct, Arri LogC3, Arri LogC4, RedLog3G10, Panasonic V-Log, Sony S-Log3, Fuji F-Log2})
 
 const static uint in_gamut = 1; // Input Gamut
+const static uint in_oetf = 0; // Input OETF
+const static uint display_encoding_preset = 1; // Display Encoding Preset
 
 // Tonescale Parameters
 // DEFINE_UI_PARAMS(tn_Lp, Display Peak Luminance, DCTLUI_SLIDER_FLOAT, 100.0, 100.0, 1000.0, 1.0)
@@ -134,11 +136,10 @@ const static float tn_Lg = 10.0; // Display Grey Luminance
 // DEFINE_UI_PARAMS(display_encoding_preset, Display Encoding Preset, DCTLUI_COMBO_BOX, 0, {rec1886, srgb, displayp3, p3d60, p3dci, xyz, rec2100pq, rec2100hlg, dolbypq}, {Rec.1886 - 2.4 Power / Rec.709, sRGB Display - 2.2 Power / Rec.709, Display P3 - 2.2 Power / P3-D65, DCI - 2.6 Power / P3-D60, DCI - 2.6 Power / P3-DCI, DCI - 2.6 Power / XYZ, Rec.2100 - PQ / Rec.2020 (P3 Limited), Rec.2100 - HLG / Rec.2020 (P3 Limited), Dolby - PQ / P3-D65})
 
 // 0-Standard, 1-Arriba, 2-Sylvan, 3-Colorful, 4-Aery, 5-Dystopic, 6-Umbra
-const static uint look_preset = 2; // Look Preset
+const static uint look_preset = 0; // Look Preset
 const static uint tonescale_preset = 0; // Tonescale Preset
 const static uint _cwp = 0; // Creative White
 const static float _cwp_lm = 0.25; // Creative White Limit
-const static uint display_encoding_preset = 1; // Display Encoding Preset
 
 /*------------------------------------------------------------------------------------------------------------*/
 
@@ -274,6 +275,11 @@ float _logf(float a)
 float _exp2f(float a)
 {
   return exp2(a);
+}
+
+float _exp10f(float a)
+{
+  return exp10(a);
 }
 
 float _log2f(float a)
@@ -446,6 +452,77 @@ float3 clampminf3(float3 a, float mn) { return make_float3(_fmaxf(a.x, mn), _fma
 float clampf(float a, float mn, float mx) { return _fminf(_fmaxf(a, mn), mx); }
 float3 clampf3(float3 a, float mn, float mx) { return make_float3(clampf(a.x, mn, mx), clampf(a.y, mn, mx), clampf(a.z, mn, mx)); }
 
+/* OETF Linearization Transfer Functions ---------------------------------------- */
+
+float oetf_davinci_intermediate(float x) {
+    return x <= 0.02740668f ? x/10.44426855f : _exp2f(x/0.07329248f - 7.0f) - 0.0075f;
+}
+float oetf_filmlight_tlog(float x) {
+  return x < 0.075f ? (x-0.075f)/16.184376489665897f : _expf((x - 0.5520126568606655f)/0.09232902596577353f) - 0.0057048244042473785f;
+}
+float oetf_acescct(float x) {
+  return x <= 0.155251141552511f ? (x - 0.0729055341958355f)/10.5402377416545f : _exp2f(x*17.52f - 9.72f);
+}
+float oetf_arri_logc3(float x) {
+  return x < 5.367655f*0.010591f + 0.092809f ? (x - 0.092809f)/5.367655f : (_exp10f((x - 0.385537f)/0.247190f) - 0.052272f)/5.555556f;
+}
+float oetf_arri_logc4(float x) {
+  return x < -0.7774983977293537f ? x*0.3033266726886969f - 0.7774983977293537f : (_exp2f(14.0f*(x - 0.09286412512218964f)/0.9071358748778103f + 6.0f) - 64.0f)/2231.8263090676883f;
+}
+float oetf_red_log3g10(float x) {
+  return x < 0.0f ? (x/15.1927f) - 0.01f : (_exp10f(x/0.224282f) - 1.0f)/155.975327f - 0.01f;
+}
+float oetf_panasonic_vlog(float x) {
+  return x < 0.181f ? (x - 0.125f)/5.6f : _exp10f((x - 0.598206f)/0.241514f) - 0.00873f;
+}
+float oetf_sony_slog3(float x) {
+  return x < 171.2102946929f/1023.0f ? (x*1023.0f - 95.0f)*0.01125f/(171.2102946929f - 95.0f) : (_exp10f(((x*1023.0f - 420.0f)/261.5f))*(0.18f + 0.01f) - 0.01f);
+}
+float oetf_fujifilm_flog2(float x) {
+  return x < 0.100686685370811f ? (x - 0.092864f)/8.799461f : (_exp10f(((x - 0.384316f)/0.245281f))/5.555556f - 0.064829f/5.555556f);
+}
+
+float3 linearize(float3 rgb, int tf) {
+  if (tf==0) { // Linear
+    return rgb;
+  } else if (tf==1) { // Davinci Intermediate
+    rgb.x = oetf_davinci_intermediate(rgb.x);
+    rgb.y = oetf_davinci_intermediate(rgb.y);
+    rgb.z = oetf_davinci_intermediate(rgb.z);
+  } else if (tf==2) { // Filmlight T-Log
+    rgb.x = oetf_filmlight_tlog(rgb.x);
+    rgb.y = oetf_filmlight_tlog(rgb.y);
+    rgb.z = oetf_filmlight_tlog(rgb.z);
+  } else if (tf==3) { // ACEScct
+    rgb.x = oetf_acescct(rgb.x);
+    rgb.y = oetf_acescct(rgb.y);
+    rgb.z = oetf_acescct(rgb.z);
+  } else if (tf==4) { // Arri LogC3
+    rgb.x = oetf_arri_logc3(rgb.x);
+    rgb.y = oetf_arri_logc3(rgb.y);
+    rgb.z = oetf_arri_logc3(rgb.z);
+  } else if (tf==5) { // Arri LogC4
+    rgb.x = oetf_arri_logc4(rgb.x);
+    rgb.y = oetf_arri_logc4(rgb.y);
+    rgb.z = oetf_arri_logc4(rgb.z);
+  } else if (tf==6) { // RedLog3G10
+    rgb.x = oetf_red_log3g10(rgb.x);
+    rgb.y = oetf_red_log3g10(rgb.y);
+    rgb.z = oetf_red_log3g10(rgb.z);
+  } else if (tf==7) { // Panasonic V-Log
+    rgb.x = oetf_panasonic_vlog(rgb.x);
+    rgb.y = oetf_panasonic_vlog(rgb.y);
+    rgb.z = oetf_panasonic_vlog(rgb.z);
+  } else if (tf==8) { // Sony S-Log3
+    rgb.x = oetf_sony_slog3(rgb.x);
+    rgb.y = oetf_sony_slog3(rgb.y);
+    rgb.z = oetf_sony_slog3(rgb.z);
+  } else if (tf==9) { // Fuji F-Log2
+    rgb.x = oetf_fujifilm_flog2(rgb.x);
+    rgb.y = oetf_fujifilm_flog2(rgb.y);
+    rgb.z = oetf_fujifilm_flog2(rgb.z);
+  }  return rgb;
+}
 
 /* EOTF Transfer Functions ---------------------------------------- */
 
@@ -929,7 +1006,7 @@ float3 opendrt_transform(float3 rgb)
   // if (crv_enable == 1) crv_tsn = oetf_filmlight_tlog(pos.x/res.x);
 
   // Linearize if a non-linear input oetf / transfer function is selected
-  // rgb = linearize(rgb, in_oetf);
+  rgb = linearize(rgb, in_oetf);
 
 
   /***************************************************
