@@ -20,6 +20,5 @@ void main(uint3 global_invocation_id: SV_DispatchThreadID) {
   float4 input_color = inputTexture[pixel_coords];
   float3 output_color = opendrt_transform(input_color.rgb);
 
-  float4 output_color_with_alpha = float4(output_color, input_color.a);
-  outputTexture.Store(pixel_coords, output_color_with_alpha);
+  outputTexture.Store(pixel_coords, input_color);
 }
